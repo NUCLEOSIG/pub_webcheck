@@ -1,18 +1,17 @@
-# 1. Usar una imagen base oficial de Python (ligera)
-FROM python:3.11-slim
+FROM python:3.9-slim
 
-# 2. Establecer el directorio de trabajo dentro del contenedor
 WORKDIR /app
 
-# 3. Copiar el archivo de requerimientos primero para aprovechar el cache de Docker
+# Instalar dependencias
 COPY requirements.txt .
+RUN apt-get update && apt-get install -y tzdata && rm -rf /var/lib/apt/lists/* \
+    && pip install --no-cache-dir -r requirements.txt
 
-# 4. Instalar las dependencias de Python
-RUN pip install --no-cache-dir -r requirements.txt
+# Copiar el código fuente
+COPY . .
 
-# 5. Copiar el resto del código de la aplicación al contenedor
-COPY update.py .
-COPY urls.txt .
+# Exponer el puerto de Flask
+EXPOSE 5000
 
-# 6. Comando por defecto para ejecutar el script cuando el contenedor inicie
-CMD ["python", "update.py"]
+# El comando se define en docker-compose, pero dejamos uno por defecto
+CMD ["python", "app.py"]

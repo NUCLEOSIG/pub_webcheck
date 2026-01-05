@@ -2,6 +2,7 @@ import requests
 import time
 import os
 import smtplib
+import mysql.connector
 from email.message import EmailMessage
 from dotenv import load_dotenv
 from datetime import datetime
@@ -17,6 +18,12 @@ TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 EMAIL_ADDRESS = os.getenv("EMAIL_ADDRESS")
 EMAIL_PASSWORD = os.getenv("EMAIL_PASSWORD")
 RECIPIENT_EMAIL = os.getenv("RECIPIENT_EMAIL")
+
+# --- Configuración de Base de Datos (MySQL) ---
+DB_HOST = os.getenv("DB_HOST", default="")
+DB_USER = os.getenv("DB_USER", default="")
+DB_PASSWORD = os.getenv("DB_PASSWORD", default="")
+DB_NAME = os.getenv("DB_NAME", default="")
 
 def send_email_notification(subject, body):
     """Envía una notificación por correo electrónico usando Gmail."""
@@ -62,33 +69,71 @@ while True:
         else:
             print("Con conexión a internet.")
 
-            urls_a_verificar = []
-            urls_file = 'urls.txt'
+            sitios = []
+            conn = None
             try:
-                with open(urls_file, 'r', encoding='utf-8') as f:
-                    # Leemos cada línea, quitamos espacios en blanco y omitimos líneas vacías
-                    urls_a_verificar = [line.strip() for line in f if line.strip()]
-            except FileNotFoundError:
-                print(f"🚨 Alerta: El archivo '{urls_file}' no fue encontrado. No se verificarán URLs.")
+                conn = mysql.connector.connect(
+                    host=DB_HOST,
+                    user=DB_USER,
+                    password=DB_PASSWORD,
+                    database=DB_NAME
+                )
+                cursor = conn.cursor(dictionary=True)
+                # Seleccionamos solo los sitios activos
+                cursor.execute("SELECT id, url FROM sitios WHERE activo = 1")
+                sitios = cursor.fetchall()
+            except mysql.connector.Error as err:
+                print(f"Error al conectar a la base de datos: {err}")
 
-            if not urls_a_verificar:
-                print("No hay URLs en el archivo para verificar.")
+            if not sitios:
+                print("No hay sitios activos para verificar en la base de datos.")
                 
             failed_sites = []
 
-            for url in urls_a_verificar:
+            for sitio in sitios:
+                url = sitio['url']
+                site_id = sitio['id']
+                nuevo_estado = "Pendiente"
+                tiempo_respuesta = 0
+
                 try:
                     response = requests.get(url, timeout=10)
+                    tiempo_respuesta = response.elapsed.total_seconds()
                     if response.ok:
                         print(f"✅ {url} -> Correcto (Status: {response.status_code})")
+                        nuevo_estado = f"{response.status_code} OK"
                     else:
                         error_message = f"Status: {response.status_code}"
                         print(f"🚨 {url} -> Alerta ({error_message})")
                         failed_sites.append((url, error_message))
+                        nuevo_estado = f"Error {response.status_code}"
                 except (requests.ConnectionError, requests.Timeout) as e:
                     error_message = "Error de conexión/timeout"
                     print(f"🚨 {url} -> Alerta ({error_message})")
                     failed_sites.append((url, error_message))
+                    nuevo_estado = "Error Conexión"
+
+                # Actualizar estado en la base de datos
+                if conn and conn.is_connected():
+                    try:
+                        ahora = datetime.now()
+                        # Actualizar estado actual (para el dashboard en tiempo real)
+                        cursor.execute(
+                            "UPDATE sitios SET estado = %s, ultima_revision = %s, tiempo_respuesta = %s WHERE id = %s",
+                            (nuevo_estado, ahora, tiempo_respuesta, site_id)
+                        )
+                        # Guardar registro en el historial
+                        cursor.execute(
+                            "INSERT INTO historial (sitio_id, estado, tiempo_respuesta, fecha) VALUES (%s, %s, %s, %s)",
+                            (site_id, nuevo_estado, tiempo_respuesta, ahora)
+                        )
+                        conn.commit()
+                    except mysql.connector.Error as err:
+                        print(f"Error al actualizar DB para {url}: {err}")
+
+            if conn and conn.is_connected():
+                cursor.close()
+                conn.close()
 
             if failed_sites:
                 summary_message = "🚨 ¡Alerta! Se detectaron fallos en los siguientes sitios:\n\n"

@@ -4,5 +4,19 @@ services:
   web-checker:
     build: .
     container_name: web_checker_app
+    command: python app.py
+    ports:
+      - "5000:5000"
     env_file: .env
+    environment:
+      - TZ=America/Mexico_City
+    restart: unless-stopped
+
+  updater:
+    build: .
+    container_name: web_checker_updater
+    command: python -u update.py
+    env_file: .env
+    environment:
+      - TZ=America/Mexico_City
     restart: unless-stopped

@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MXSIG - Monitor de Sitios</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+</head>
+<body class="container mt-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1>MXSIG - Monitor de Sitios</h1>
+        {% if session.get('logged_in') %}
+        <a href="{{ url_for('logout') }}" class="btn btn-outline-danger">Cerrar Sesión</a> 
+        {% else %}
+        <a href="{{ url_for('login') }}" class="btn btn-outline-primary">Iniciar Sesión</a>
+        {% endif %}
+    </div>
+
+    <!-- Mensajes Flash -->
+    {% with messages = get_flashed_messages() %}
+      {% if messages %}
+        <div class="alert alert-info">
+          {% for message in messages %}
+            <div>{{ message }}</div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    {% endwith %}
+
+    <!-- Formulario Agregar -->
+    <div class="card mb-4">
+        <div class="card-body">
+            <form action="{{ url_for('add_site') }}" method="post" class="row g-3">
+                <div class="col-auto flex-grow-1">
+                    <input type="text" name="nombre" class="form-control" placeholder="nombre" required>
+                </div>
+                <div class="col-auto flex-grow-1">
+                    <input type="url" name="url" class="form-control" placeholder="https://mxsig.com" required>
+                </div>
+                <div class="col-auto">
+                    <button type="submit" class="btn btn-primary">Agregar Sitio</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabla de Sitios -->
+    <div class="table-responsive shadow-sm rounded">
+    <table class="table table-striped table-hover align-middle text-nowrap mb-0">
+        <thead class="table-dark">
+            <tr>
+                <th class="d-none d-md-table-cell">ID</th>
+                <th>URL</th>
+                <th>Estado Actual</th>
+                <th>Tiempo (s)</th>
+                <th>Monitoreo</th>
+                <th>Última Revisión</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for sitio in sitios %}
+            <tr>
+                <td class="d-none d-md-table-cell">{{ sitio.id }}</td>
+                <td>
+                    {% if session.get('logged_in') %}
+                    <a href="{{ sitio.url }}" target="_blank">{{ sitio.nombre }}</a>
+                    {% else %}
+                    <a href="#" target="_blank">{{ sitio.nombre }}</a>
+                    {% endif %}
+                    
+                </td>
+                <td>
+                    <span class="badge {% if '200' in sitio.estado %}bg-success{% elif 'Pendiente' in sitio.estado %}bg-secondary{% else %}bg-danger{% endif %}">
+                        {{ sitio.estado }}
+                    </span>
+                </td>
+                <td>{{ "%.2f"|format(sitio.tiempo_respuesta or 0) }}s</td>
+                <td>
+                    {% if sitio.activo %}
+                        <span class="text-success fw-bold">Activo</span>
+                    {% else %}
+                        <span class="text-muted">Inactivo</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if sitio.ultima_revision %}
+                        {{ sitio.ultima_revision.strftime('%d/%m/%Y %H:%M') }}
+                    {% endif %}
+                </td>
+                <td>
+                    <a href="{{ url_for('edit_site', id=sitio.id) }}" class="btn btn-sm btn-warning">Editar</a>
+                    <a href="{{ url_for('site_history', id=sitio.id) }}" class="btn btn-sm btn-info text-white">Historial</a>
+                    <form action="{{ url_for('delete_site', id=sitio.id) }}" method="POST" style="display:inline;" onsubmit="return confirm('¿Estás seguro de que deseas eliminar este sitio?');">
+                        <button type="submit" class="btn btn-danger btn-sm">Eliminar</button>
+                    </form>
+
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+
+    <!-- Paginación -->
+    {% if total_pages > 1 %}
+    <nav aria-label="Navegación de páginas" class="mb-5">
+        <ul class="pagination justify-content-center">
+            <li class="page-item {% if page == 1 %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('index', page=page-1) }}">Anterior</a>
+            </li>
+            {% for p in range(1, total_pages + 1) %}
+            <li class="page-item {% if p == page %}active{% endif %}">
+                <a class="page-link" href="{{ url_for('index', page=p) }}">{{ p }}</a>
+            </li>
+            {% endfor %}
+            <li class="page-item {% if page == total_pages %}disabled{% endif %}">
+                <a class="page-link" href="{{ url_for('index', page=page+1) }}">Siguiente</a>
+            </li>
+        </ul>
+    </nav>
+    {% endif %}
+</body>
+</html>
